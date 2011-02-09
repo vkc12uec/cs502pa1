@@ -10,7 +10,6 @@ import java.lang.*;
 
 
 class RingSubstrate extends Thread{
-//class RingSubstrate implements Runnable {
 	/* data mem */
 	private String 		nbrLeft;
 	private String 		nbrRight;
@@ -41,13 +40,6 @@ class RingSubstrate extends Thread{
 	String msgDelimiter = "#";
 
 
-//	private final int msg_tag_start 	= 0;
-//	//private final int msg_tag_end	 	= 0;
-//	private final int src_start	 	= 32;
-//	//private final int src_end	 	= 0;
-//	private final int dest_start	 	= 64;
-//	//private final int dest_end	 	= 0;
-//	private final int msg_start	 	= 0;
 
 	/* API s */
 	public RingSubstrate(RingApp rApp) {
@@ -59,6 +51,27 @@ class RingSubstrate extends Thread{
 		outsock = null;					//new Socket (6790);
 		opids = null; 	/* populate it somehow */
 		//selfId = "me";
+	}
+
+	public String sendToHost(String msg, String dest)
+	{
+		try
+		{
+			Socket clientSocket = new Socket(dest, listenport);
+			DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
+			BufferedReader inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+		
+			outToServer.writeBytes(msg + '\n');
+			String reply = inFromServer.readLine();
+
+			clientSocket.close();
+			return reply;
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+		return null;
 	}
 
 	public void run()
@@ -86,40 +99,46 @@ class RingSubstrate extends Thread{
 				
 				System.out.println("Tag = " + msg_tag + " src = " + src);
 
-				if(msg_tag.compareTo(joinRingSetH0_tag) == 0)
+				if(msg_tag.compareTo(joinRingSetH0_tag) == 0) // Msg-H0 recv
 				{
 					// By convention node will choose the two hosts as itself and the its right neighbor
 					String hostLeft = selfId; // It returns its self Id as the left host for the requesting machine
 					String hostRight;
+
 					if(nbrRight == null) // To check whether it is the only member in the ring
 					{
 						nbrLeft = src;
-						nbrRight = src;
 						hostRight = selfId;
 					}
 					else
 					{
-						String msg(joinRingSetHR_tag + msgDelimiter + src);
-						String reply;
-						Socket clientSocket = new Socket(nbrRight, listenport);
-						DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
-						BufferedReader inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-						
-						outToServer.writeBytes(msg + '\n');
-						reply = inFromServer.readLine();
-						if(reply == null)
+						String msg = joinRingSetHR_tag + msgDelimiter + src; // Msg-HR sent
+						String reply = sendToHost(msg, nbrRight);
+//						Socket clientSocket = new Socket(nbrRight, listenport);
+//						DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
+//						BufferedReader inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+//						
+//						outToServer.writeBytes(msg + '\n');
+//						reply = inFromServer.readLine();
+						if(reply.compareTo("no") == 0)
 						{
 							System.out.println("Right host is selfish");
 						}
 						hostRight = nbrRight;
-						clientSocket.close();
+						//clientSocket.close();
 					}
-
+					
+					nbrRight = src; // It sets the src as its right ngbr
+					String joinRingSetH0_res = hostLeft + msgDelimiter + hostRight + '\n';
+            				outToClient.writeBytes(joinRingSetH0_res);
+					//String reply = sendToHost(joinRingSetH0_res, src);
 
 				}
-				if(msg_tag.compareTo(joinRingSetHR_tag) == 0)
+				if(msg_tag.compareTo(joinRingSetHR_tag) == 0) // Msg-HR recv
 				{
-
+					nbrLeft = src;
+					String msg = "yes" + '\n';
+            				outToClient.writeBytes(msg);
 				}
 				if(msg_tag.compareTo(joinRingHost_tag) == 0)
 				{
@@ -163,17 +182,10 @@ class RingSubstrate extends Thread{
 
 		   So, best would be to ask ( h1 and either of (hl/hr) if they can include h0 in b/w )
 		   */
-		String reply;
-		String msgid = "Set_joinRing";
-		//String msgid = opids.get("Set_joinRing");
-		String query = msgid+hostName;
-		outsock = new Socket (hostName, listenport);
-		DataOutputStream outToServer = new DataOutputStream(outsock.getOutputStream());
-		BufferedReader inFromServer = new BufferedReader(new InputStreamReader(outsock.getInputStream()));
+		String msg = joinRingSetH0_tag + msgDelimiter + selfId; // Msg-H0 sent
 
-		outToServer.writeBytes(query + '\n');
-		reply = inFromServer.readLine();
-
+		String reply = sendToHost(msg, hostName);
+		System.out.println(reply);
 		/* how to check if reply is OK ? 
 		   1st nrb = hostName
 		   2nd nbr = nbr of (hostname)
@@ -281,13 +293,14 @@ public class RingApp
 		}
 		else
 		{
-			System.out.println(args[0] + "is my contact node to join the ring");	
+			System.out.println(args[0] + " is my contact node to join the ring");	
 			Set<String> ngbrHost = ringSubstrate.joinRing(args[0]); // The two neighbors the node would be inserted in between
 			Iterator it = ngbrHost.iterator();
 			String ngbrHostLeft = it.next().toString();
 			String ngbrHostRight = it.next().toString();
 
-			ringSubstrate.joinRing(ngbrHostLeft, ngbrHostRight);
+			System.out.println("Left = " + ngbrHostLeft + " Right = " + ngbrHostRight);
+			//ringSubstrate.joinRing(ngbrHostLeft, ngbrHostRight);
 		}
 
 		// At this point it has joined the ring
@@ -296,6 +309,7 @@ public class RingApp
 		ringSubThread.start();
 		
 		System.out.println("Thread has been started. Now main is controlled by the Application Layer");
+
 	}
 }
 

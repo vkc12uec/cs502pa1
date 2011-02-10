@@ -8,6 +8,12 @@ import java.util.*;
 import java.net.*;
 import java.lang.*;
 
+/*
+TODO:
+	- race conditions
+	- corner cases, like self leaveRing
+	- Exception
+*/
 
 class RingSubstrate extends Thread {
 	/* data mem */

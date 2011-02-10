@@ -9,7 +9,7 @@ import java.net.*;
 import java.lang.*;
 
 
-class RingSubstrate extends Thread{
+class RingSubstrate extends Thread {
 	/* data mem */
 	private String 		nbrLeft;
 	private String 		nbrRight;
@@ -20,9 +20,6 @@ class RingSubstrate extends Thread{
 	HashMap 			opids;			// operation ids
 	private final int	listenport;
 	private final int	outport;
-
-	/* which part of code shud handle the incoming requests ? There shud be a handler func. here which uses 
-	   ServerSocket ? */
 
 	/*
 	TAG:
@@ -120,7 +117,7 @@ class RingSubstrate extends Thread{
 				DataOutputStream outToClient = new DataOutputStream(connectionSocket.getOutputStream());
 
 				clientMsg = inFromClient.readLine();
-				debug("\n\n------ " + clientMsg);
+				debug("\n\n------ " + clientMsg+ "------");
 				if(clientMsg.indexOf(msgDelimiter) == -1)
 				{
 					continue;
@@ -130,10 +127,9 @@ class RingSubstrate extends Thread{
 				// Message sent will have different words/token separated by msgDelimiter defined above
 				String[] words = clientMsg.split(msgDelimiter);
 				String msg_tag = words[0];
-				//String req_respo = words[1];
 				String src = words[1];				// host who wants to join the ring
 				//System.out.println("Tag = " + msg_tag + " src = " + src);
-
+//case 1
 				if(msg_tag.compareTo(joinRingSetH0_tag) == 0) // Msg-H0 recv
 				{
 					// By convention node will choose the two hosts as itself and the its right neighbor
@@ -167,8 +163,9 @@ class RingSubstrate extends Thread{
 					debug("Left = " + nbrLeft + " Right = " + nbrRight);
 					//String reply = sendToHost(joinRingSetH0_res, src);
 
-				}	// case 1
+				}
 
+//case 2
 				if(msg_tag.compareTo(joinRingSetHR_tag) == 0) // Msg-HR recv
 				{
 					nbrLeft = src;
@@ -177,17 +174,19 @@ class RingSubstrate extends Thread{
 					debug("Left = " + nbrLeft + " Right = " + nbrRight);
 				}
 
+//case 3
 				if(msg_tag.compareTo(joinRingHost_tag) == 0)
 				{
 
 				}
+//case 4
 
 				if(msg_tag.compareTo(leaveRing_tag) == 0)//Msg-leaveRing recv
 				{
 					String pros_nbr;
 					//debug(" ----- " + words[2]);
 					pros_nbr = words[2];						// can throw outofbounds
-					debug(" ----- pros_nbr = " + pros_nbr);
+					//debug(" ----- pros_nbr = " + pros_nbr);
 					debug("Left = " + nbrLeft + " Right = " + nbrRight);
 					// the host X has send its nbrs msg like = leaveRing_tag # X's id # <prospective-joinee>
 					// but this node shud know before hand if X was a right nbr or left nbr ?
@@ -200,19 +199,18 @@ class RingSubstrate extends Thread{
 					else if (nbrRight.compareTo(src) == 0) {
 						nbrRight = pros_nbr;
 					}
-					debug("---- yes");
+					//debug("---- yes");
 					String msg = "yes" + '\n';
 					outToClient.writeBytes(msg);
 					debug("Left = " + nbrLeft + " Right = " + nbrRight);
 					// reply to leaving host f'off
 				}
 
-				// case 4
+//case 5
 				if(msg_tag.compareTo(getHosts_tag) == 0)
 				{
 					/* grep for selfid in msg received, assume that host pass msg ACW in our algo. 
 					   msg received = <tag> + <id-1> + <id-2> ....  */
-
 					if (src.indexOf(selfId) != -1) // u are done
 					{
 						// all the hostids will be joined by "||"
@@ -228,24 +226,24 @@ class RingSubstrate extends Thread{
 					}
 				}
 
-				// case 5
+//case 6
 				if(msg_tag.compareTo(sendMsgCW_tag) == 0)
 				{
 
 				}
-
+//case 7
 				if(msg_tag.compareTo(sendMsgACW_tag) == 0)
 				{
 
 				}
-
+//case 8
 				if(msg_tag.compareTo(sendAppMsg_tag) == 0)
 				{
 					// received = sendAppMsg_tag + '#' + 'hostName' used by sendAppMessage()
 					// consider ACW movement
-					// if selfId == hostName ,,, ,sTOP
 					if (selfId.compareTo (src) == 0) {
-						System.out.println ("got a msg from which node ? ");		// we are not sending the sender's UID
+						System.out.println ("got a msg from which node ? ");
+						// we are not sending the sender's UID
 					}
 					else {
 						String msg = sendAppMsg_tag + msgDelimiter + src;
@@ -260,6 +258,8 @@ class RingSubstrate extends Thread{
 			e.printStackTrace();
 		}
 	}		// end run()
+	
+	//			############################		API s			############################
 
 	public Set<String> joinRing(String hostName) throws /*RingException,*/ IOException{
 		/*
@@ -322,10 +322,9 @@ class RingSubstrate extends Thread{
 		String msg = leaveRing_tag + msgDelimiter + selfId + msgDelimiter + prospectivenbr; //Msg-leaveRing sent
 		String reply = sendToHost (msg, whichNbr);
 		return reply;
-		//		DOUBT /* todo in host-listening-part:
 
-		/*		the host 'whichNbr' shud wait till it confirms that host 'prospectivenbr' also received a [LeaveRing] with
-				its hostuuid .
+		/*		the host 'whichNbr' shud wait till it confirms that host 'prospectivenbr' also received a 
+				[LeaveRing] with its hostuuid .
 				When it confirms that, then they can modify their datastructures & connect together */
 	}
 
@@ -339,11 +338,7 @@ class RingSubstrate extends Thread{
 		
 		this.doWait();
 
-		/*synchronized (hostsJoinedlist) {
-				hostsJoinedlist.wait();
-		}*/
-
-		debug("\n\n --------------" + hostsJoinedlist);
+		debug("\n\n #### "+ hostsJoinedlist+  " ####");
 		StringTokenizer st = new StringTokenizer(hostsJoinedlist, hostsJoiner );
 		while(st.hasMoreTokens())
 			ls.add(st.nextToken());
@@ -357,7 +352,12 @@ class RingSubstrate extends Thread{
 	public void sendAppMessageCounterClockwise(String message) //throws RingException
 	{}
 	public void sendAppMessage(String message, String hostName) //throws RingException
-	{}
+	{
+		// make packet and send ACW
+		// we are NOT putting the sender's ID
+		String msg = sendAppMsg_tag + hostName;
+		sendToHost (msg, nbrRight);	// shud we care about reply ?
+	}
 
 }		// end class Substrate
 

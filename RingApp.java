@@ -26,6 +26,7 @@ class RingSubstrate extends Thread {
 	HashMap 			opids;			// operation ids
 	private final int	listenport;
 	private final int	outport;
+	private final Object lock;
 
 	/*
 	TAG:
@@ -53,7 +54,8 @@ class RingSubstrate extends Thread {
 	String response = "response";
 	String msgDelimiter = "#";
 	String hostsJoiner = "||";
-	String hostsJoinedlist;
+	 String hostsJoinedlist;
+	boolean hostlistBool;
 
 	/* API s */
 	public RingSubstrate(RingApp rApp) {
@@ -66,19 +68,28 @@ class RingSubstrate extends Thread {
 		opids = null; 	/* populate it somehow */
 		//selfId = "me";
 		hostsJoinedlist="";
+		hostlistBool = false;
+		lock = new Object();
 	}
 
 	public void doWait(){
 			synchronized(hostsJoinedlist){
-					try{
-							hostsJoinedlist.wait();
-					} catch(InterruptedException e){System.out.println ("probelem here 1");}
+					while(hostsJoinedlist.equals(""))
+					{
+						try{
+							debug("before itnernal wait");
+								hostsJoinedlist.wait();
+							debug("after itnernal wait");
+						} 
+						catch(InterruptedException e){System.out.println ("probelem here 1");}
+					}
 			}
 	}
 
 	public void doNotify(){
 			synchronized(hostsJoinedlist){
 					hostsJoinedlist.notify();
+					//notifyAll();
 			}
 	}
 
@@ -98,6 +109,7 @@ class RingSubstrate extends Thread {
 			outToServer.writeBytes(msg + '\n');
 			String reply = inFromServer.readLine();
 
+			//debug(reply + " from " + dest);
 			clientSocket.close();
 			return reply;
 		}
@@ -108,6 +120,7 @@ class RingSubstrate extends Thread {
 		System.out.println (whoami + ": returns null ");
 		return null;
 	}
+// ####################################### Ring substrate thread runs this function ##############################################
 
 	public void run() //throws /*RingException*/ InterruptedException
 	{
@@ -118,6 +131,8 @@ class RingSubstrate extends Thread {
 
 			while(true)
 			{
+				//hostsJoinedlist = ("HJL in run thread");
+				//debug (hostsJoinedlist);
 				Socket connectionSocket = mysock.accept();
 				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(connectionSocket.getInputStream()));
 				DataOutputStream outToClient = new DataOutputStream(connectionSocket.getOutputStream());
@@ -135,7 +150,8 @@ class RingSubstrate extends Thread {
 				String msg_tag = words[0];
 				String src = words[1];				// host who wants to join the ring
 				//System.out.println("Tag = " + msg_tag + " src = " + src);
-//case 1
+
+//###################################### case 1 ######################################################################
 				if(msg_tag.compareTo(joinRingSetH0_tag) == 0) // Msg-H0 recv
 				{
 					// By convention node will choose the two hosts as itself and the its right neighbor
@@ -171,7 +187,7 @@ class RingSubstrate extends Thread {
 
 				}
 
-//case 2
+//###################################### case 2 ######################################################################
 				if(msg_tag.compareTo(joinRingSetHR_tag) == 0) // Msg-HR recv
 				{
 					nbrLeft = src;
@@ -180,12 +196,12 @@ class RingSubstrate extends Thread {
 					debug("Left = " + nbrLeft + " Right = " + nbrRight);
 				}
 
-//case 3
+//###################################### case 3 ######################################################################
 				if(msg_tag.compareTo(joinRingHost_tag) == 0)
 				{
 
 				}
-//case 4
+//###################################### case 4 ######################################################################
 
 				if(msg_tag.compareTo(leaveRing_tag) == 0)//Msg-leaveRing recv
 				{
@@ -212,48 +228,92 @@ class RingSubstrate extends Thread {
 					// reply to leaving host f'off
 				}
 
-//case 5
+//###################################### case 5 ######################################################################
 				if(msg_tag.compareTo(getHosts_tag) == 0)
 				{
 					/* grep for selfid in msg received, assume that host pass msg ACW in our algo. 
 					   msg received = <tag> + <id-1> + <id-2> ....  */
+
+					outToClient.writeBytes("yes\n");
 					if (src.indexOf(selfId) != -1) // u are done
 					{
+						debug("=========got the host list");
 						// all the hostids will be joined by "||"
-						synchronized (hostsJoinedlist) {
+						synchronized (lock) {
 								hostsJoinedlist = src;
-								this.doNotify();
+								hostlistBool = false;
+								lock.notifyAll();
+
+								debug("Value of this in notify is  " + this);
+								//this.doNotify();
+								//doNotify();
+								debug("==========After notifying the main thread");
 						}
 					}
 					else {	// make a packet and pass on to ur rite nbr 
-						String passon_packet = getHosts_tag + msgDelimiter + src + hostsJoiner + selfId;
+						String passon_packet = clientMsg + hostsJoiner + selfId;
+						//String passon_packet = getHosts_tag + msgDelimiter + src + hostsJoiner + selfId;
 						sendToHost (passon_packet, nbrRight);
 						// dont care reply
 					}
 				}
 
-//case 6
+//###################################### case 6 ######################################################################
 				if(msg_tag.compareTo(sendMsgCW_tag) == 0)
 				{
+					outToClient.writeBytes("yes\n");
+						String message = words[2];
+					//String dest = words[2];
+					if (selfId.compareTo (src) == 0) {
+						System.out.println ("got back the looped msg CW " + src);
+						myrapp.deliver(message);
+						// we are not sending the sender's UID
+					}
+					else {
+						//String msg = sendAppMsg_tag + msgDelimiter + src;
+						//sendToHost (msg, nbrRight);
+						sendToHost(clientMsg, nbrLeft);
+						debug("forwarding msg from " + src);
+						myrapp.deliver(message);
+					}
 
 				}
-//case 7
+//###################################### case 7 ######################################################################
 				if(msg_tag.compareTo(sendMsgACW_tag) == 0)
 				{
-
+					outToClient.writeBytes("yes\n");
+						String message = words[2];
+					//String dest = words[2];
+					if (selfId.compareTo (src) == 0) {
+						System.out.println ("got back the looped msg CW " + src);
+						myrapp.deliver(message);
+						// we are not sending the sender's UID
+					}
+					else {
+						//String msg = sendAppMsg_tag + msgDelimiter + src;
+						//sendToHost (msg, nbrRight);
+						sendToHost(clientMsg, nbrRight);
+						debug("forwarding msg from " + src);
+						myrapp.deliver(message);
+					}
 				}
-//case 8
+//###################################### case 8 ######################################################################
 				if(msg_tag.compareTo(sendAppMsg_tag) == 0)
 				{
 					// received = sendAppMsg_tag + '#' + 'hostName' used by sendAppMessage()
 					// consider ACW movement
-					if (selfId.compareTo (src) == 0) {
-						System.out.println ("got a msg from which node ? ");
+					String dest = words[2];
+					if (selfId.compareTo (dest) == 0) {
+						System.out.println ("got a msg from " + src);
+						String message = words[3];
+						myrapp.deliver(message);
 						// we are not sending the sender's UID
 					}
 					else {
-						String msg = sendAppMsg_tag + msgDelimiter + src;
-						sendToHost (msg, nbrRight);
+						//String msg = sendAppMsg_tag + msgDelimiter + src;
+						//sendToHost (msg, nbrRight);
+						sendToHost(clientMsg, nbrRight);
+						debug("forwarding msg from " + src);
 					}
 				}
 
@@ -295,7 +355,7 @@ class RingSubstrate extends Thread {
 		// -ve 
 		else {
 			Set<String> s=new LinkedHashSet<String>();
-			debug("oooooooooo" + reply.substring(0, posi) + "|||" + reply.substring(posi+1) );
+			//debug("oooooooooo" + reply.substring(0, posi) + "|||" + reply.substring(posi+1) );
 			s.add(reply.substring(0, posi));
 			s.add(reply.substring(posi+1));
 			return s;
@@ -341,8 +401,20 @@ class RingSubstrate extends Thread {
 		List<String>	ls		=	new ArrayList<String>();
 		String			msg 	= 	getHosts_tag + msgDelimiter + selfId;
 		sendToHost (msg, nbrRight);		// passon this msg to ur rite
-		
-		this.doWait();
+		debug("=======Before Wait");
+	/*	
+		debug(" Value of this in wait is " + this);
+		//this.doWait();
+		doWait();
+		debug("=======After Wait");
+		*/
+
+		hostlistBool = true;
+		synchronized(lock){
+				while (hostlistBool){
+						lock.wait();
+				}
+		}
 
 		debug("\n\n #### "+ hostsJoinedlist+  " ####");
 		StringTokenizer st = new StringTokenizer(hostsJoinedlist, hostsJoiner );
@@ -353,27 +425,111 @@ class RingSubstrate extends Thread {
 	}
 
 	public void sendAppMessageClockwise(String message) //throws RingException
-	{}
+	{
+			String msg = sendMsgCW_tag + msgDelimiter + selfId + msgDelimiter + message;
+			sendToHost (msg, nbrLeft);	// shud we care about reply ?
+	}
+
 
 	public void sendAppMessageCounterClockwise(String message) //throws RingException
-	{}
+	{
+			String msg = sendMsgACW_tag + msgDelimiter + selfId +  msgDelimiter + message;
+			sendToHost (msg, nbrRight);	// shud we care about reply ?
+	}
+
 	public void sendAppMessage(String message, String hostName) //throws RingException
 	{
 		// make packet and send ACW
 		// we are NOT putting the sender's ID
-		String msg = sendAppMsg_tag + hostName;
-		sendToHost (msg, nbrRight);	// shud we care about reply ?
+		if(hostName.equals(selfId))
+		{
+			myrapp.deliver(message);
+		}
+		else
+		{
+			String msg = sendAppMsg_tag + msgDelimiter + selfId + msgDelimiter + hostName + msgDelimiter + message;
+			sendToHost (msg, nbrRight);	// shud we care about reply ?
+		}
 	}
 
 }		// end class Substrate
 
 public class RingApp
 {
+
+	private static RingSubstrate ringSubstrate;
+
+	public boolean deliver(String msg)
+	{
+		System.out.println(msg);
+		return true;
+	}
+
+	public RingApp(String args[]) throws InterruptedException, IOException
+	{
+		RingSubstrate ringSubstrate = new RingSubstrate(this);
+
+		String localHost;
+		try 
+		{
+			java.net.InetAddress localMachine = java.net.InetAddress.getLocalHost();
+			localHost = localMachine.getHostName();
+			ringSubstrate.selfId = localHost;
+		}
+		catch (java.net.UnknownHostException uhe) 
+		{
+			System.out.println("Problem in getting local host name");
+		}
+
+
+		if(args.length <= 0)
+		{
+			System.out.println("It is the first member of the ring");
+		}
+		else
+		{
+			System.out.println(args[0] + " is my contact node to join the ring");	
+			Set<String> ngbrHost = ringSubstrate.joinRing(args[0]); // The two neighbors the node would be inserted in between
+			//System.out.println("Set length = " + ngbrHost.size());
+			String ngbrHostLeft;
+			String ngbrHostRight;
+
+			Iterator it = ngbrHost.iterator();
+			if(ngbrHost.size() == 1)
+			{
+				ngbrHostLeft = it.next().toString();
+				ngbrHostRight = ngbrHostLeft;
+			}
+			else
+			{
+				ngbrHostLeft = it.next().toString();
+				ngbrHostRight = it.next().toString();
+			}
+
+			System.out.println("Left = " + ngbrHostLeft + " Right = " + ngbrHostRight);
+			ringSubstrate.joinRing(ngbrHostLeft, ngbrHostRight);
+		}
+		ringSubstrate.start();
+
+		System.out.println("Thread has been started. Now main is controlled by the Application Layer");
+			Thread.sleep(5000);
+//				System.out.println ("In main thread" + ringSubstrate.hostsJoinedlist);
+			System.out.println("woken from sleep");
+			//ringSubstrate.leaveRing();
+			if(ringSubstrate.selfId.equals("cloud01.cs.purdue.edu"))
+			{
+				//ringSubstrate.getHosts();
+				ringSubstrate.sendAppMessageClockwise("Hello World");
+				ringSubstrate.sendAppMessageCounterClockwise("Doom  World");
+			}
+	}
+
 	public static void main(String args[]) throws InterruptedException, IOException// We need to pass the hostname of one of the nodes in the ring. So that it can request that host to let it join the ring
 	{
-		//RingApp rApp = new RingApp();
-		RingSubstrate ringSubstrate = new RingSubstrate(new RingApp());
-		String localHost;
+		RingApp rApp = new RingApp(args);
+
+		//RingSubstrate ringSubstrate = new RingSubstrate(this);
+		/*String localHost;
 		try 
 		{
 			java.net.InetAddress localMachine = java.net.InetAddress.getLocalHost();
@@ -418,14 +574,20 @@ public class RingApp
 
 		// At this point it has joined the ring
 		// We can spawn a new thread which takes care of the duties of the ring network. The main thread would continue to do the job of application
-		Thread ringSubThread = new Thread(ringSubstrate);
-		ringSubThread.start();
+//		Thread ringSubThread = new Thread(ringSubstrate);
+
+		//RingSubstrate ringSubstrate = new RingSubstrate(this);
+		ringSubstrate.start();
 
 		System.out.println("Thread has been started. Now main is controlled by the Application Layer");
 		Thread.sleep(5000);
 		System.out.println("woken from sleep");
 		//ringSubstrate.leaveRing();
-		ringSubstrate.getHosts();
+		if(ringSubstrate.selfId.equals("cloud01.cs.purdue.edu"))
+		{
+			ringSubstrate.getHosts();
+		}
+		//ringSubstrate.sendAppMessage("Hello World", "cloud02.cs.purdue.edu");*/
 	}		// end main
 }		// end class RingApp()
 

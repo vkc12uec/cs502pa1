@@ -15,19 +15,49 @@ TODO:
 	- Exception
 */
 
-class FindLeader extends Thread {
+class FindLeader extends RingSubstrate {			// extend it as RingSubs., so that datamembers of RingSubs are visible here
 	private RingSubstrate 		myRingSubs;
 	private RingApp 			myRingApp;
 	private String	 			hostList;
+	private boolean	 			still_leader_in_nbrhood;
+	String msgDelimiter = "#";
+	String 						ordered_list;
+
+	// there shud another ds so that when RingSubstrate gets a rply msg, then it shud increase the hop count
 
 	public FindLeader (RingSubstrate rs, RingApp ra) {
 		myRingSubs = rs;
 		myRingApp = ra;
 		hostList = rs.selfId;
+		still_leader_in_nbrhood	= true;
+		ordered_list = "";
 	}
+
+	// this thread will run on each host. they carry oepration in sync. rounds. Incase, a node finds that he is not a proble leader in its neighbour hood, it shud stop this thread
+	// so, while loop shud be on a boolean, which can be set by substrate .....\
+	// if node is not a leader, it wud just pass by the ELECTION & REPLY msgs.
 
 	public void run() {
 		// if you are very 1st node, be ur self the leader
+		String msg;
+		String me = "FindLeader::run()"
+		String compareWith = selfId;
+
+		while (still_leader_in_nbrhood) {
+			// make a election msg. + propagate to left and right
+			msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + hop + msgDelimiter + compareWith;		// MSG -elec send
+			debug (me + " : " + msg);
+			reply1 = sendToHost (msg, nbrRight);
+			reply2 = sendToHost (msg, nbrLeft);
+			// wait for substrate to signal thsi thread for further oepration
+
+		}	// end while
+
+		while (leader.equals (selfId)) {
+			sleep (30000);		// 30 secs.
+			// ping each host for heartbeat, p2p way.
+			// if any host dead, join them.
+		}
 	}
 
 }	// end Class FindLeader
@@ -68,10 +98,10 @@ class RingSubstrate extends Thread {
 	// PKT = TAG # SRC			: SRC is host for which this msg. is meant
 
 	String sendElection_tag 	= "sendElection";
-	// PKT = TAG # SRC # phase # hop-count			: SRC is host for which this msg. is meant
+	// PKT = TAG # SRC # phase # hop-count # comparator			: SRC is host for which this msg. is meant
 
-	String electionReply_tag 	= "sendElectionReply";
-	// PKT = TAG # SRC # phase # hop-count			: SRC is host for which this msg. is meant
+	String sendElecReply_tag 	= "sendElectionReply";
+	// PKT = TAG # SRC 											: SRC is host for which this msg. is meant
 
 	String request = "request";
 	String response = "response";
@@ -108,7 +138,9 @@ The ELECTION messages sent by candidates contain three fields:
 	whenever the message is forwarded to the next pi .
 */
 	public String getLeader() throws RingException {
-		int hop = 0, phase = 0;
+		debug ("Leader value for my node ("+selfId+") = "+leader;
+
+		/*int hop = 0, phase = 0;
 		String msg;
         while (!leader_elected) {
             msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter +
@@ -117,11 +149,11 @@ The ELECTION messages sent by candidates contain three fields:
             reply1 = sendToHost (msg, nbrRight);
             reply2 = sendToHost (msg, nbrLeft);
                // todo more ...                                                 
-		}
+		} */
 	}
 
 
-	public void doWait(){
+	/*public void doWait(){
 			synchronized(hostsJoinedlist){
 					while(hostsJoinedlist.equals(""))
 					{
@@ -134,13 +166,16 @@ The ELECTION messages sent by candidates contain three fields:
 					}
 			}
 	}
+*/
 
+	/*
 	public void doNotify(){
 			synchronized(hostsJoinedlist){
 					hostsJoinedlist.notify();
 					//notifyAll();
 			}
 	}
+*/
 
 	public void debug (String msg) {
 		System.out.println (msg);
@@ -209,25 +244,28 @@ The ELECTION messages sent by candidates contain three fields:
 
 //###################################### handler for election msg listen  ###############################################
 
-				if(msg_tag.equals(electionReply_tag) == 0) {		// received a REPLY
+				if(msg_tag.equals(sendElecReply_tag) == 0) {		// received a REPLY
 					String msg, reply;
-					//kthId = words [2];
+
 					if (src.equals(selfId)) {	// advance to next phase 
 					// u shud receive REPLY from 2 sides
 
 					}
 					else {	// relay the REPLY packet
-						msg = electionReply_tag + msgDelimiter + selfId;
+						msg = sendElecReply_tag + msgDelimiter + selfId;
 						reply = sendToLR (msg, src);	// send to left or right depending on 'src'
 					}
 				}
 
-				if(msg_tag.equals(sendElection_tag) == 0) {
+				if(msg_tag.equals(sendElection_tag) == 0) {		// MSG-elec recv.
+				/* msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + hop + msgDelimiter + compareWith; */
 
-					int phase = Integer.parseInt(words[2]);
-					int hop = Integer.parseInt(words[3]);
+					int phase 			= Integer.parseInt(words[2]);
+					int hop 			= Integer.parseInt(words[3]);
+					Srting compareWith 	= words[4];
+
 					String new_msg, reply;
-
+/*
 					if (hop == pow(2, phase) ) {	// this is the last process in k nbrhood
 					// what shud reply msg sturcture be ?
 						new_msg = electionReply_tag + msgDelimiter + selfId;	// see
@@ -238,23 +276,34 @@ The ELECTION messages sent by candidates contain three fields:
 							new_reply = sendToHost (new_msg, nbrLeft);
 						// we shud sleep so that stability is maintained.
 					}
+					*/
 
-					else if (selfId.compareTo(src) > 0)	{	// swallow
+					if (selfId.compareTo(src) > 0)	{	// swallow
 						// wht to do?
+						// u shud tell the leader theread on the mid point to stop 'its leader election'
 					}
-					else if ( selfId.compareTo(src) < 0) {
-						new_msg = msg_tag + msgDelimiter + src + msgDelimiter + phase + msgDelimiter + (hop+1);
-						
-						// relay msg
-						if (src.equals(nbrRight))
-							new_reply = sendToHost (new_msg, nbrRight);
-						else
-							new_reply = sendToHost (new_msg, nbrLeft);
+
+					else if ( selfId.compareTo(compareWith) < 0) {	// propagate
+
+						//if (hop == pow(2, phase)) {	// terminal node of this phase
+						if (hop == 0) { 			//pow(2, phase)) {	// terminal node of this phase
+								msg = sendElecReply_tag + selfId;	// the mid-point will know frm selfId if he has reved 2 replies
+								sendToLR (msg, src); 	// ack ?
+							}
+						else {
+							// fwd the ELECTION msg along the orig. direction
+							new_msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + (hop-1) + msgDelimiter + compareWith;
+							if (src.equals(nbrRight))
+								sendToHost (new_msg, nbrRight);
+							else
+								sendToHost (new_msg, nbrLeft);
+						}
 					}
 					else {
 						// you are the leader
 					}
-				}
+
+				}	// MSG-elec recv.
 
 //###################################### handler for election msg listen  ###############################################
 

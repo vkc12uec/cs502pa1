@@ -15,6 +15,23 @@ TODO:
 	- Exception
 */
 
+class FindLeader extends Thread {
+	private RingSubstrate 		myRingSubs;
+	private RingApp 			myRingApp;
+	private String	 			hostList;
+
+	public FindLeader (RingSubstrate rs, RingApp ra) {
+		myRingSubs = rs;
+		myRingApp = ra;
+		hostList = rs.selfId;
+	}
+
+	public void run() {
+		// if you are very 1st node, be ur self the leader
+	}
+
+}	// end Class FindLeader
+
 class RingSubstrate extends Thread {
 	/* data mem */
 	private String 		nbrLeft;
@@ -50,12 +67,22 @@ class RingSubstrate extends Thread {
 	String sendAppMsg_tag 	= "sendAppMsg";
 	// PKT = TAG # SRC			: SRC is host for which this msg. is meant
 
+	String sendElection_tag 	= "sendElection";
+	// PKT = TAG # SRC # phase # hop-count			: SRC is host for which this msg. is meant
+
+	String electionReply_tag 	= "sendElectionReply";
+	// PKT = TAG # SRC # phase # hop-count			: SRC is host for which this msg. is meant
+
 	String request = "request";
 	String response = "response";
 	String msgDelimiter = "#";
 	String hostsJoiner = "||";
-	 String hostsJoinedlist;
+	String hostsJoinedlist;
 	boolean hostlistBool;
+
+	int 	myphase;
+	int 	hop;
+	boolean leader_elected;
 
 	/* API s */
 	public RingSubstrate(RingApp rApp) {
@@ -70,7 +97,29 @@ class RingSubstrate extends Thread {
 		hostsJoinedlist="";
 		hostlistBool = false;
 		lock = new Object();
+		leader_elected = false;
 	}
+
+/* algo:
+The ELECTION messages sent by candidates contain three fields:
+	The id of the candidate.
+	The current phase number k .
+	A hop counter d, which is initially 0 and is incremented by 1
+	whenever the message is forwarded to the next pi .
+*/
+	public String getLeader() throws RingException {
+		int hop = 0, phase = 0;
+		String msg;
+        while (!leader_elected) {
+            msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter +
+                    phase + msgDelimiter + hop;
+
+            reply1 = sendToHost (msg, nbrRight);
+            reply2 = sendToHost (msg, nbrLeft);
+               // todo more ...                                                 
+		}
+	}
+
 
 	public void doWait(){
 			synchronized(hostsJoinedlist){
@@ -95,6 +144,13 @@ class RingSubstrate extends Thread {
 
 	public void debug (String msg) {
 		System.out.println (msg);
+	}
+
+	public String sendToLR(String msg, String src) {	// send to left or right depending on 'src'
+		if (src.equals(nbrRight))
+			return sendToHost (msg, nbrRight);
+		else
+			return sendToHost (msg, nbrLeft);
 	}
 
 	public String sendToHost(String msg, String dest)
@@ -151,6 +207,57 @@ class RingSubstrate extends Thread {
 				String src = words[1];				// host who wants to join the ring
 				//System.out.println("Tag = " + msg_tag + " src = " + src);
 
+//###################################### handler for election msg listen  ###############################################
+
+				if(msg_tag.equals(electionReply_tag) == 0) {		// received a REPLY
+					String msg, reply;
+					//kthId = words [2];
+					if (src.equals(selfId)) {	// advance to next phase 
+					// u shud receive REPLY from 2 sides
+
+					}
+					else {	// relay the REPLY packet
+						msg = electionReply_tag + msgDelimiter + selfId;
+						reply = sendToLR (msg, src);	// send to left or right depending on 'src'
+					}
+				}
+
+				if(msg_tag.equals(sendElection_tag) == 0) {
+
+					int phase = Integer.parseInt(words[2]);
+					int hop = Integer.parseInt(words[3]);
+					String new_msg, reply;
+
+					if (hop == pow(2, phase) ) {	// this is the last process in k nbrhood
+					// what shud reply msg sturcture be ?
+						new_msg = electionReply_tag + msgDelimiter + selfId;	// see
+
+						if (src.equals(nbrRight))	// 'REPLY' left of right depending on src
+							new_reply = sendToHost (new_msg, nbrRight);
+						else
+							new_reply = sendToHost (new_msg, nbrLeft);
+						// we shud sleep so that stability is maintained.
+					}
+
+					else if (selfId.compareTo(src) > 0)	{	// swallow
+						// wht to do?
+					}
+					else if ( selfId.compareTo(src) < 0) {
+						new_msg = msg_tag + msgDelimiter + src + msgDelimiter + phase + msgDelimiter + (hop+1);
+						
+						// relay msg
+						if (src.equals(nbrRight))
+							new_reply = sendToHost (new_msg, nbrRight);
+						else
+							new_reply = sendToHost (new_msg, nbrLeft);
+					}
+					else {
+						// you are the leader
+					}
+				}
+
+//###################################### handler for election msg listen  ###############################################
+
 //###################################### case 1 ######################################################################
 				if(msg_tag.compareTo(joinRingSetH0_tag) == 0) // Msg-H0 recv
 				{
@@ -198,7 +305,7 @@ class RingSubstrate extends Thread {
 
 //###################################### case 3 ######################################################################
 				if(msg_tag.compareTo(joinRingHost_tag) == 0)
-				{
+				{// ? what is this for ?
 
 				}
 //###################################### case 4 ######################################################################
@@ -468,6 +575,7 @@ public class RingApp
 	public RingApp(String args[]) throws InterruptedException, IOException
 	{
 		RingSubstrate ringSubstrate = new RingSubstrate(this);
+		FindLeader fl = new FindLeader(this, ringSubstrate);
 
 		String localHost;
 		try 

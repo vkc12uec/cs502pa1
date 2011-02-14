@@ -7,6 +7,7 @@ import java.io.*;
 import java.util.*;
 import java.net.*;
 import java.lang.*;
+import java.math.*;
 
 /*
 TODO:
@@ -14,14 +15,18 @@ TODO:
 	- corner cases, like self leaveRing
 	- Exception
 */
+//public class RingSubstrate ;
 
 class FindLeader extends RingSubstrate {			// extend it as RingSubs., so that datamembers of RingSubs are visible here
 	private RingSubstrate 		myRingSubs;
 	private RingApp 			myRingApp;
 	private String	 			hostList;
 	private boolean	 			still_leader_in_nbrhood;
-	String msgDelimiter = "#";
+	//String 						msgDelimiter = "#";
 	String 						ordered_list;
+	String 						leader;
+	public int	phase;
+	public int	hop;
 
 	// there shud another ds so that when RingSubstrate gets a rply msg, then it shud increase the hop count
 
@@ -31,6 +36,9 @@ class FindLeader extends RingSubstrate {			// extend it as RingSubs., so that da
 		hostList = rs.selfId;
 		still_leader_in_nbrhood	= true;
 		ordered_list = "";
+		phase = 1;
+		hop = Math.pow (2, phase);
+		leader = "batman";
 	}
 
 	// this thread will run on each host. they carry oepration in sync. rounds. Incase, a node finds that he is not a proble leader in its neighbour hood, it shud stop this thread
@@ -38,20 +46,23 @@ class FindLeader extends RingSubstrate {			// extend it as RingSubs., so that da
 	// if node is not a leader, it wud just pass by the ELECTION & REPLY msgs.
 
 	public void run() {
-		// if you are very 1st node, be ur self the leader
-		String msg;
-		String me = "FindLeader::run()"
+		String msg, reply1, reply2;
+		String me = "FindLeader::run()";
 		String compareWith = selfId;
 
 		while (still_leader_in_nbrhood) {
 			// make a election msg. + propagate to left and right
-			msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + hop + msgDelimiter + compareWith;		// MSG -elec send
+			String []args = {sendElection_tag , selfId , String.valueOf(phase) , String.valueOf(hop) , compareWith };
+			msg = joinit (args);
+				//sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + hop + msgDelimiter + compareWith;		// MSG -elec send
 			debug (me + " : " + msg);
 			reply1 = sendToHost (msg, nbrRight);
 			reply2 = sendToHost (msg, nbrLeft);
 			// wait for substrate to signal thsi thread for further oepration
 
 		}	// end while
+
+		// if this thread is a leader, this while loop shud end
 
 		while (leader.equals (selfId)) {
 			sleep (30000);		// 30 secs.
@@ -64,8 +75,8 @@ class FindLeader extends RingSubstrate {			// extend it as RingSubs., so that da
 
 class RingSubstrate extends Thread {
 	/* data mem */
-	private String 		nbrLeft;
-	private String 		nbrRight;
+	public String 		nbrLeft;
+	public String 		nbrRight;
 	public String 		selfId;			// like xinu01.cs.purdue.edu IOException
 	ServerSocket 		mysock;
 	RingApp 			myrapp;
@@ -74,11 +85,6 @@ class RingSubstrate extends Thread {
 	private final int	listenport;
 	private final int	outport;
 	private final Object lock;
-
-	/*
-	TAG:
-	RECEIVED_PACKET_FORMAT
-	*/
 
 	String joinRingSetH0_tag 	= "joinRingSetH0"; // We have only two as we assume that H0 would become the left host of the requesting host
 	// PKT = TAG # SRC
@@ -96,23 +102,27 @@ class RingSubstrate extends Thread {
 	// PKT = TAG # <SOURCE>
 	String sendAppMsg_tag 	= "sendAppMsg";
 	// PKT = TAG # SRC			: SRC is host for which this msg. is meant
-
 	String sendElection_tag 	= "sendElection";
-	// PKT = TAG # SRC # phase # hop-count # comparator			: SRC is host for which this msg. is meant
-
+	// PKT = TAG # SRC # phase # hop-count # comparator			
 	String sendElecReply_tag 	= "sendElectionReply";
-	// PKT = TAG # SRC 											: SRC is host for which this msg. is meant
+	// PKT = TAG # SRC # comparator 											
+	String sendStopLeaderThread_tag 	= "sendStopLeaderThread";
+	// PKT = TAG # SRC # comparator 											
 
 	String request = "request";
 	String response = "response";
 	String msgDelimiter = "#";
 	String hostsJoiner = "||";
 	String hostsJoinedlist;
+	int		received;
 	boolean hostlistBool;
 
-	int 	myphase;
+	int 	phase;
 	int 	hop;
 	boolean leader_elected;
+	String 	leader;
+	private final Object lock1;		// it shudnt be final / ?????  / 
+	public boolean	still_leader_in_nbrhood;
 
 	/* API s */
 	public RingSubstrate(RingApp rApp) {
@@ -127,7 +137,10 @@ class RingSubstrate extends Thread {
 		hostsJoinedlist="";
 		hostlistBool = false;
 		lock = new Object();
+		lock1 = new Object();
 		leader_elected = false;
+		received = 0;
+		still_leader_in_nbrhood = true; phase = 0; hop = 1;
 	}
 
 /* algo:
@@ -138,50 +151,34 @@ The ELECTION messages sent by candidates contain three fields:
 	whenever the message is forwarded to the next pi .
 */
 	public String getLeader() throws RingException {
-		debug ("Leader value for my node ("+selfId+") = "+leader;
-
-		/*int hop = 0, phase = 0;
-		String msg;
-        while (!leader_elected) {
-            msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter +
-                    phase + msgDelimiter + hop;
-
-            reply1 = sendToHost (msg, nbrRight);
-            reply2 = sendToHost (msg, nbrLeft);
-               // todo more ...                                                 
-		} */
+		debug ("Leader value for my node ("+selfId+") = "+leader);
 	}
 
-
-	/*public void doWait(){
-			synchronized(hostsJoinedlist){
-					while(hostsJoinedlist.equals(""))
-					{
-						try{
-							debug("before itnernal wait");
-								hostsJoinedlist.wait();
-							debug("after itnernal wait");
-						} 
-						catch(InterruptedException e){System.out.println ("probelem here 1");}
-					}
-			}
-	}
-*/
-
-	/*
-	public void doNotify(){
-			synchronized(hostsJoinedlist){
-					hostsJoinedlist.notify();
-					//notifyAll();
-			}
-	}
-*/
+	// helper functions
+    public String joinit (String[] args) {
+        String delim = "#";
+        String reply="";
+        for (int i=0; i<args.length; i++) {
+            reply += args[i];
+            if (i == args.length-1)
+                break;
+            reply += delim;
+        }
+		return reply;
+    }  		// check return OK
 
 	public void debug (String msg) {
 		System.out.println (msg);
 	}
 
-	public String sendToLR(String msg, String src) {	// send to left or right depending on 'src'
+	public String relay(String msg, String src) {	// propagate to left or right depending on 'src'
+		if (src.equals(nbrRight))
+			return sendToHost (msg, nbrLeft);	
+		else
+			return sendToHost (msg, nbrRight);
+	}
+
+	public String antiRelay(String msg, String src) {	// propagate to left or right depending on 'src'
 		if (src.equals(nbrRight))
 			return sendToHost (msg, nbrRight);
 		else
@@ -211,6 +208,8 @@ The ELECTION messages sent by candidates contain three fields:
 		System.out.println (whoami + ": returns null ");
 		return null;
 	}
+	// END helper functions
+
 // ####################################### Ring substrate thread runs this function ##############################################
 
 	public void run() //throws /*RingException*/ InterruptedException
@@ -219,6 +218,7 @@ The ELECTION messages sent by candidates contain three fields:
 		{
 			mysock = new ServerSocket (listenport);
 			String clientMsg;
+			String msg, reply, reply1, reply2;		// mite cause PROBLEM 
 
 			while(true)
 			{
@@ -241,66 +241,87 @@ The ELECTION messages sent by candidates contain three fields:
 				String msg_tag = words[0];
 				String src = words[1];				// host who wants to join the ring
 				//System.out.println("Tag = " + msg_tag + " src = " + src);
+				
 
 //###################################### handler for election msg listen  ###############################################
 
-				if(msg_tag.equals(sendElecReply_tag) == 0) {		// received a REPLY
-					String msg, reply;
+				if(msg_tag.equals(sendStopLeaderThread_tag)) {		// received a stop thread REPLY
+					// msg = sendStopLeaderThread_tag + msgDelimiter + selfId + msgDelimiter + compareWith
+					String midpoint = words[2];
 
-					if (src.equals(selfId)) {	// advance to next phase 
-					// u shud receive REPLY from 2 sides
-
-					}
-					else {	// relay the REPLY packet
-						msg = sendElecReply_tag + msgDelimiter + selfId;
-						reply = sendToLR (msg, src);	// send to left or right depending on 'src'
+					if (selfId.equals(midpoint)) {
+						synchronized (lock1) {
+							still_leader_in_nbrhood = false;	
+							}
+						}
+					else {		// relay packet
+						String [] args = { sendStopLeaderThread_tag, selfId , midpoint };
+						msg = joinit (args);		//sendStopLeaderThread_tag + msgDelimiter + selfId + msgDelimiter + compareWith;
+						relay (msg, src);
 					}
 				}
 
-				if(msg_tag.equals(sendElection_tag) == 0) {		// MSG-elec recv.
+				if(msg_tag.equals(sendElecReply_tag)) {		// received a REPLY
+					//String msg, reply;
+					String compareWith = words[2];
+
+					if (src.equals(selfId)) {	// advance to next phase 
+						// u shud receive REPLY from 2 sides
+						received++;
+						if (received == 2) {
+							received = 0;
+								// send new ELECTION packet
+							String [] args = { sendElection_tag , selfId , String.valueOf(++phase) , String.valueOf (Math.pow(2, phase) ) , compareWith };
+								//msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + (++phase) + msgDelimiter + Math.pow(2, phase) + msgDelimiter + compareWith;	// CHECK phase, hop
+								// copy from while leader thread.
+							reply1 = sendToHost (msg, nbrRight);
+							reply2 = sendToHost (msg, nbrLeft);
+						}
+						// else nthing todo
+					}
+					else {	// relay the REPLY packet
+						String [] args = { sendElecReply_tag, selfId , compareWith };
+						msg = joinit (args);
+						//msg = sendElecReply_tag + msgDelimiter + selfId;
+						reply = relay (msg, src);	// send to left or right depending on 'src'
+					}
+				}
+
+				if(msg_tag.equals(sendElection_tag)) {		// MSG-elec recv.
 				/* msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + hop + msgDelimiter + compareWith; */
 
 					int phase 			= Integer.parseInt(words[2]);
 					int hop 			= Integer.parseInt(words[3]);
-					Srting compareWith 	= words[4];
+					String compareWith 	= words[4];
 
-					String new_msg, reply;
-/*
-					if (hop == pow(2, phase) ) {	// this is the last process in k nbrhood
-					// what shud reply msg sturcture be ?
-						new_msg = electionReply_tag + msgDelimiter + selfId;	// see
+					//String new_msg, reply, msg;
 
-						if (src.equals(nbrRight))	// 'REPLY' left of right depending on src
-							new_reply = sendToHost (new_msg, nbrRight);
-						else
-							new_reply = sendToHost (new_msg, nbrLeft);
-						// we shud sleep so that stability is maintained.
-					}
-					*/
-
-					if (selfId.compareTo(src) > 0)	{	// swallow
-						// wht to do?
-						// u shud tell the leader theread on the mid point to stop 'its leader election'
-					}
+					if (selfId.compareTo(compareWith) > 0)	{	// swallow	or tell back the mid point to stop that while kloop
+							// u shud tell the leader theread on the mid point to stop 'its leader election'
+						String [] args = {sendStopLeaderThread_tag , selfId , compareWith };
+						msg = joinit (args);
+							//msg = sendStopLeaderThread_tag + msgDelimiter + selfId + msgDelimiter + compareWith;
+						reply = antiRelay (msg, src);
+						}
 
 					else if ( selfId.compareTo(compareWith) < 0) {	// propagate
-
-						//if (hop == pow(2, phase)) {	// terminal node of this phase
-						if (hop == 0) { 			//pow(2, phase)) {	// terminal node of this phase
+						if (hop == 0) { // tell back mid point to go in new round
 								msg = sendElecReply_tag + selfId;	// the mid-point will know frm selfId if he has reved 2 replies
-								sendToLR (msg, src); 	// ack ?
+								antiRelay (msg, src); 	// ack ?
 							}
 						else {
-							// fwd the ELECTION msg along the orig. direction
-							new_msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + (hop-1) + msgDelimiter + compareWith;
-							if (src.equals(nbrRight))
-								sendToHost (new_msg, nbrRight);
-							else
-								sendToHost (new_msg, nbrLeft);
+								// fwd the ELECTION msg along the orig. direction
+							String [] args = {sendElection_tag, selfId, String.valueOf(phase) , String.valueOf(hop-1), compareWith };
+								//msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + (hop-1) + msgDelimiter + compareWith;
+							msg = joinit (args);
+							//relay
+							relay (msg, src);
+							}
 						}
-					}
 					else {
 						// you are the leader
+						leader = selfId;
+						// do a get hosts () here and send the orderer list to all the hosts in the ring.
 					}
 
 				}	// MSG-elec recv.
@@ -323,8 +344,8 @@ The ELECTION messages sent by candidates contain three fields:
 					}
 					else
 					{
-						String msg = joinRingSetHR_tag + msgDelimiter + src; // Msg-HR sent
-						String reply = sendToHost(msg, nbrRight);
+						msg = joinRingSetHR_tag + msgDelimiter + src; // Msg-HR sent
+						reply = sendToHost(msg, nbrRight);
 						if(reply.compareTo("no") == 0)
 						{
 							System.out.println("Right host is selfish");
@@ -347,7 +368,7 @@ The ELECTION messages sent by candidates contain three fields:
 				if(msg_tag.compareTo(joinRingSetHR_tag) == 0) // Msg-HR recv
 				{
 					nbrLeft = src;
-					String msg = "yes" + '\n';
+					msg = "yes" + '\n';
 					outToClient.writeBytes(msg);
 					debug("Left = " + nbrLeft + " Right = " + nbrRight);
 				}
@@ -378,7 +399,7 @@ The ELECTION messages sent by candidates contain three fields:
 						nbrRight = pros_nbr;
 					}
 					//debug("---- yes");
-					String msg = "yes" + '\n';
+					msg = "yes" + '\n';
 					outToClient.writeBytes(msg);
 					debug("Left = " + nbrLeft + " Right = " + nbrRight);
 					// reply to leaving host f'off
@@ -432,7 +453,6 @@ The ELECTION messages sent by candidates contain three fields:
 						debug("forwarding msg from " + src);
 						myrapp.deliver(message);
 					}
-
 				}
 //###################################### case 7 ######################################################################
 				if(msg_tag.compareTo(sendMsgACW_tag) == 0)
@@ -474,14 +494,14 @@ The ELECTION messages sent by candidates contain three fields:
 				}
 
 			}			// end while (1)
-		}
+		}	// try
 		catch (Exception e)
 		{
 			e.printStackTrace();
 		}
 	}		// end run()
 	
-	//			############################		API s			############################
+//####################################		API s			############################
 
 	public Set<String> joinRing(String hostName) throws /*RingException,*/ IOException{
 		/*
@@ -526,7 +546,8 @@ The ELECTION messages sent by candidates contain three fields:
 		nbrRight = hostName2;
 	}
 
-	public void leaveRing()/* throws RingException*/ { // TODO - Kill the thread controlling the ring substrate
+	public void leaveRing()/* throws RingException*/ {
+	// TODO - Kill the thread controlling the ring substrate
 		String reply_Left = leave_nbr (nbrLeft, nbrRight);
 		String reply_Right = leave_nbr (nbrRight, nbrLeft);
 		if(reply_Left.equals("yes") && reply_Right.equals("yes"))
@@ -558,13 +579,6 @@ The ELECTION messages sent by candidates contain three fields:
 		String			msg 	= 	getHosts_tag + msgDelimiter + selfId;
 		sendToHost (msg, nbrRight);		// passon this msg to ur rite
 		debug("=======Before Wait");
-	/*	
-		debug(" Value of this in wait is " + this);
-		//this.doWait();
-		doWait();
-		debug("=======After Wait");
-		*/
-
 		hostlistBool = true;
 		synchronized(lock){
 				while (hostlistBool){
@@ -576,7 +590,6 @@ The ELECTION messages sent by candidates contain three fields:
 		StringTokenizer st = new StringTokenizer(hostsJoinedlist, hostsJoiner );
 		while(st.hasMoreTokens())
 			ls.add(st.nextToken());
-
 		return ls;
 	}
 

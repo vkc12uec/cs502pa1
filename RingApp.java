@@ -19,8 +19,8 @@ TODO:
 class FindLeader extends Thread {			// extend it as RingSubs., so that datamembers of RingSubs are visible here
 	public RingSubstrate 		myRingSubs;
 	public RingApp 				myRingApp;
-	//public static volatile boolean	 			still_leader_in_nbrhood;		// will be changed by RingSubs. listener
-	public static volatile boolean	 			am_i_leader;
+	public static boolean	 			am_i_leader;
+	//public static volatile boolean	 			am_i_leader;
 	public static boolean	 			election_continues;
 	String 						msgDelimiter = "#";
 	//String 						ordered_list;
@@ -49,12 +49,17 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 		nbrRight = rs.nbrRight;
 		nbrLeft = rs.nbrLeft;
 		selfId = rs.selfId;
+		lock1 = new Object();
 		//System.out.println ("FindLeader::ctor" + selfId + "||"+nbrLeft+"||"+nbrRight);
 	}
 	
 	public void prntDetails () {
 		String me = "FindLeader::prntDetails";
 		RingSubstrate.debug (me + " selfid = "+selfId + " nbrRight / nbrLeft " + nbrRight + " " + nbrLeft );
+	}
+
+	public static void debug (String msg) {
+		System.out.println (msg);
 	}
 
 	// this thread will run on each host. they carry oepration in sync. rounds. Incase, a node finds that he is not a proble leader in its neighbour hood, it shud stop this thread
@@ -181,7 +186,7 @@ class RingSubstrate extends Thread {
 	int 	hop;
 	boolean leader_elected;
 	String 	leader;
-	private final Object lock1;		// it shudnt be final / ?????  / 
+	//private final Object lock1;		// it shudnt be final / ?????  / 
 	String broadcastList;
 	String selected_leader;
 
@@ -198,7 +203,7 @@ class RingSubstrate extends Thread {
 		hostsJoinedlist="";
 		hostlistBool = false;
 		lock = new Object();
-		lock1 = new Object();
+		//lock1 = new Object();
 		leader_elected = false;
 		received = 0;
 		broadcastList = "broadcast-list-NULL";
@@ -316,6 +321,8 @@ The ELECTION messages sent by candidates contain three fields:
 				if(msg_tag.equals(sendBroadcast_tag)) {		
 					broadcastList = words[2];
 					selected_leader = src;
+					debug (selfId + " : msg received sendBroadcast_tag : leader is = " + selected_leader + 
+					"\n list = " + broadcastList);
 
 					// TODO : send a ping packetto leader
 				}
@@ -323,16 +330,20 @@ The ELECTION messages sent by candidates contain three fields:
 				if(msg_tag.equals(sendStopLeaderThread_tag)) {		// received a stop thread REPLY	alpha3
 						// msg = sendStopLeaderThread_tag + msgDelimiter + selfId + msgDelimiter + compareWith
 					String midpoint = words[2];
+					debug (selfId + " : msg received sendStopLeaderThread_tag");
 
 					if (selfId.equals(midpoint)) {
+						debug (selfId + " : stop self leader election thread ");
 						synchronized (FindLeader.lock1) {
 							FindLeader.election_continues = false;	
 							FindLeader.am_i_leader = false;
+							FindLeader.lock1.notifyAll();
 							}
 						}
 					else {		// relay packet
 						String [] args = { sendStopLeaderThread_tag, selfId , midpoint };
 						msg = joinit (args);		//sendStopLeaderThread_tag + msgDelimiter + selfId + msgDelimiter + compareWith;
+						debug ("id ="+selfId + " sendStopLeaderThread_tag : sending this to :"+midpoint);
 						relay (msg, src);
 					}
 				}
@@ -340,6 +351,7 @@ The ELECTION messages sent by candidates contain three fields:
 				if(msg_tag.equals(sendElecReply_tag)) {		// received a REPLY	alpha2
 					//String msg, reply;
 					String compareWith = words[2];
+					debug (selfId + " : msg received sendElecReply_tag ");
 
 					if (src.equals(selfId)) {	// advance to next phase 
 						// u shud receive REPLY from 2 sides
@@ -375,6 +387,7 @@ The ELECTION messages sent by candidates contain three fields:
 
 					if (selfId.compareTo(compareWith) > 0)	{	// swallow	or tell back the mid point to stop that while kloop
 							// u shud tell the leader theread on the mid point to stop 'its leader election'
+						debug (selfId + " : msg swallow packet from " + compareWith );
 						String [] args = {sendStopLeaderThread_tag , selfId , compareWith };	//alpha3
 						msg = joinit (args);
 							//msg = sendStopLeaderThread_tag + msgDelimiter + selfId + msgDelimiter + compareWith;
@@ -401,11 +414,12 @@ The ELECTION messages sent by candidates contain three fields:
 						synchronized (FindLeader.lock1) {
 							FindLeader.election_continues = false;
 							FindLeader.am_i_leader = true;
+							FindLeader.lock1.notifyAll();
 							}
-						debug (" $$$$$ I am the leader $$$$$ : " + selfId);
+						debug (selfId + " $$$$$ I am the leader $$$$$ : " + selfId);
 					}
 
-				}	
+				}
 
 //###################################### handler for election msg listen  ###############################################
 
@@ -773,9 +787,13 @@ public class RingApp
 
 		System.out.println ("main: now we got a ring" );
 
+		//if(ringSubstrate.selfId.equals("sslab19.cs.purdue.edu")) {
+
 		FindLeader fl = new FindLeader(this, ringSubstrate);
 		fl.prntDetails();
 		fl.start();
+		//}
+
         if(ringSubstrate.selfId.equals("sslab19.cs.purdue.edu"))
         {
             //ringSubstrate.getHosts();

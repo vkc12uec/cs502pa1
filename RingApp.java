@@ -73,7 +73,7 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 
 	public void run() {
 		String msg, reply, reply1, reply2;
-		String me = "FindLeader::run()";
+		String me = "FindLeader::run() ";
 		String compareWith = selfId;
 
 		// still_leader_in_nbrhood = true, this will be made false by RingSubs.
@@ -96,7 +96,7 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 								}
                 }
         }
-		debug("out of synchronised block");
+		debug(me +"out of synchronised block");
 		
 		if (am_i_leader == true) {
 
@@ -114,7 +114,7 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 
 					// if ordered_list is not > 1 , u r screwed
 					String broadcast = listToString (ordered_list);
-					debug (broadcast);
+					debug (me + broadcast);
 
 					for (int i=0; i < ordered_list.size(); i++) {
 						String desti = ordered_list.get(i);
@@ -392,7 +392,7 @@ The ELECTION messages sent by candidates contain three fields:
 				DataOutputStream outToClient = new DataOutputStream(connectionSocket.getOutputStream());
 
 				clientMsg = inFromClient.readLine();
-				debug("\n\n------ " + clientMsg+ "------");
+				debug("\n\nMsg Recevied: \n\t" + clientMsg+ "\n");
 				if(clientMsg.indexOf(msgDelimiter) == -1)
 				{
 					continue;
@@ -408,18 +408,18 @@ The ELECTION messages sent by candidates contain three fields:
 
 //###################################### handler for election msg listen A ###############################################
 
-				if(msg_tag.equals(sendUpdateNbr)) {		
+				if(msg_tag.equals(sendUpdateNbr)) {
 					outToClient.writeBytes("yes\n");		// why are we still doing this ?
-				String lr = words [2];		// left or right ?
-				String newnbr = words[3];
+					String lr = words [2];		// left or right ?
+					String newnbr = words[3];
 
-				if (lr.equals ("right")) {
-					nbrRight = newnbr;
-					debug ("\nUpdate my right nbr");
+					if (lr.equals ("right")) {
+						nbrRight = newnbr;
+						debug ("\nUpdate my right nbr");
 					}
-				else {
-					nbrLeft = newnbr;
-					debug ("\nUpdate my left nbr");
+					else {
+						nbrLeft = newnbr;
+						debug ("\nUpdate my left nbr");
 					}
 
 					// TODO :print an ordered list again to see if ring is joined 
@@ -429,8 +429,7 @@ The ELECTION messages sent by candidates contain three fields:
 					outToClient.writeBytes("yes\n");
 					broadcastList = words[2];
 					selected_leader = src;
-					debug (selfId + " : msg received sendBroadcast_tag : leader is = " + selected_leader + 
-					"\n list = " + broadcastList);
+					debug (" Broadcast msg from: " + selected_leader + "\n list = " + broadcastList);
 
 					// TODO : send a ping packetto leader
 				}
@@ -444,7 +443,7 @@ The ELECTION messages sent by candidates contain three fields:
 					//debug (selfId + " : msg received sendStopLeaderThread_tag");
 
 					if (selfId.equals(midpoint)) {
-						debug (selfId + " : stop self leader election thread ");
+						debug (" Stop self leader election thread ");
 						synchronized (FindLeader.lock1) {
 							FindLeader.election_continues = false;	
 							FindLeader.am_i_leader = false;
@@ -510,7 +509,7 @@ The ELECTION messages sent by candidates contain three fields:
 
 					if (selfId.compareTo(compareWith) > 0)	{	// swallow	or tell back the mid point to stop that while kloop
 							// u shud tell the leader theread on the mid point to stop 'its leader election'
-						debug (selfId + " : msg swallow packet from " + compareWith );
+						debug (" Msg. swallow packet from " + compareWith );
 						String [] args = {sendStopLeaderThread_tag , selfId , compareWith };	//alpha3
 						msg = joinit (args);
 							//msg = sendStopLeaderThread_tag + msgDelimiter + selfId + msgDelimiter + compareWith;
@@ -544,7 +543,7 @@ The ELECTION messages sent by candidates contain three fields:
 							FindLeader.am_i_leader = true;
 							FindLeader.lock1.notifyAll();
 							}
-						debug (selfId + " $$$$$ I am the leader $$$$$ : " + selfId);
+						debug (" $$$$$ I am the leader $$$$$ : ");
 					}
 
 				}
@@ -637,7 +636,7 @@ The ELECTION messages sent by candidates contain three fields:
 					outToClient.writeBytes("yes\n");
 					if (src.indexOf(selfId) != -1) // u are done
 					{
-						debug("=========got the host list");
+						debug("Got the host list");
 						// all the hostids will be joined by "||"
 						synchronized (lock) {
 								hostsJoinedlist = src;
@@ -665,7 +664,7 @@ The ELECTION messages sent by candidates contain three fields:
 						String message = words[2];
 					//String dest = words[2];
 					if (selfId.compareTo (src) == 0) {
-						System.out.println ("got back the looped msg CW " + src);
+						System.out.println ("Got back the looped msg CW " + src);
 						myrapp.deliver(message);
 						// we are not sending the sender's UID
 					}
@@ -673,7 +672,7 @@ The ELECTION messages sent by candidates contain three fields:
 						//String msg = sendAppMsg_tag + msgDelimiter + src;
 						//sendToHost (msg, nbrRight);
 						sendToHost(clientMsg, nbrLeft);
-						debug("forwarding msg from " + src);
+						debug("Forwarding msg \"sendMsgCW_tag\" from " + src);
 						myrapp.deliver(message);
 					}
 				}
@@ -692,7 +691,7 @@ The ELECTION messages sent by candidates contain three fields:
 						//String msg = sendAppMsg_tag + msgDelimiter + src;
 						//sendToHost (msg, nbrRight);
 						sendToHost(clientMsg, nbrRight);
-						debug("forwarding msg from " + src);
+						debug("Forwarding msg from " + src);
 						myrapp.deliver(message);
 					}
 				}
@@ -703,7 +702,7 @@ The ELECTION messages sent by candidates contain three fields:
 					// consider ACW movement
 					String dest = words[2];
 					if (selfId.compareTo (dest) == 0) {
-						System.out.println ("got a msg from " + src);
+						System.out.println ("\nGot a msg from " + src);
 						String message = words[3];
 						myrapp.deliver(message);
 						// we are not sending the sender's UID
@@ -712,7 +711,7 @@ The ELECTION messages sent by candidates contain three fields:
 						//String msg = sendAppMsg_tag + msgDelimiter + src;
 						//sendToHost (msg, nbrRight);
 						sendToHost(clientMsg, nbrRight);
-						debug("forwarding msg from " + src);
+						debug("Forwarding msg from " + src);
 					}
 				}
 

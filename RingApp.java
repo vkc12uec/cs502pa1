@@ -32,8 +32,10 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 	String	nbrLeft;
 	public static String		sendElection_tag;
 	public static String		sendBroadcast_tag;
+	public static String		heartBeat_tag;
 	public static String		sendUpdateNbr;
 	public static Object		lock1;
+	public List<String>		ordered_list;
 	public List<String>		dead_list;
 
 	public FindLeader (RingApp ra, RingSubstrate rs) {
@@ -48,6 +50,7 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 		leader_id = "batman";
 		sendElection_tag = "sendElection";
 		sendBroadcast_tag = "sendBroadcast";
+		heartBeat_tag = "heartBeat";
 		sendUpdateNbr 	= "sendUpdateNbr";
 		// PKT = TAG # SRC # left/right # new_id 											
 		nbrRight = rs.nbrRight;
@@ -55,6 +58,7 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 		selfId = rs.selfId;
 		lock1 = new Object();
 		dead_list = new ArrayList <String> ();
+		ordered_list = new ArrayList <String> ();
 		//System.out.println ("FindLeader::ctor" + selfId + "||"+nbrLeft+"||"+nbrRight);
 	}
 	
@@ -82,7 +86,7 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 		String []args = {sendElection_tag , selfId , String.valueOf(phase) , String.valueOf(hop - 1) , compareWith };
 		msg = RingSubstrate.joinit (args);
 			//sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + hop + msgDelimiter + compareWith;		// MSG -elec send
-		RingSubstrate.debug (me + " : " + msg);
+		//debug (me + " : " + msg);
 		reply1 = RingSubstrate.sendToHost (msg, nbrRight);		// their's reply will be handled by RingSubs. obj, on this host.
 		reply2 = RingSubstrate.sendToHost (msg, nbrLeft);	// alpha1
 
@@ -96,38 +100,50 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 								}
                 }
         }
-		debug(me +"out of synchronised block");
+		//debug(me +"out of synchronised block");
 		
 		if (am_i_leader == true) {
 
+		try {
+				 ordered_list = myRingSubs.getHosts();
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+
 			while (true) {
 				try {
-					sleep (30000);		// 30 secs.
+					sleep (5000);		// 30 secs.
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
 
 				try {
-					List <String> ordered_list = myRingSubs.getHosts();
+					//List <String> ordered_list = myRingSubs.getHosts();
 					//ordered_list = myRingSubs.getHosts();
 					//List <String> ordered_list = myRingSubs.getHosts();
 
 					// if ordered_list is not > 1 , u r screwed
-					String broadcast = listToString (ordered_list);
-					debug (me + broadcast);
+					//String broadcast = listToString (ordered_list);
+					//debug (me + broadcast);
 
+						debug("======before deadlist connection chk=");
 					for (int i=0; i < ordered_list.size(); i++) {
 						String desti = ordered_list.get(i);
 						//check if host is dead ?
-						InetAddress address = InetAddress.getByName(desti);
-						if (address.isReachable(3000) == false) {
+						//InetAddress address = InetAddress.getByName(desti);
+						String [] args2 = {heartBeat_tag, selfId};
+						msg  = RingSubstrate.joinit(args2);
+						reply = RingSubstrate.sendToHost(msg, desti);
+						if (reply.equals("no")) {
 							debug ("\n Node :"+ desti + " has died ");
 							dead_list.add(desti);
 						}
+						debug("======After deadlist connection chk=");
 
-						String []args1 = {sendBroadcast_tag , selfId, broadcast};
-						msg = RingSubstrate.joinit (args1);
-						reply = RingSubstrate.sendToHost(msg, desti);			// check here if node died	beta1
+						//String []args1 = {sendBroadcast_tag , selfId, broadcast};
+						//msg = RingSubstrate.joinit (args1);
+						//reply = RingSubstrate.sendToHost(msg, desti);			// check here if node died	beta1
 					}
 
 					if (dead_list.size() != 0) {
@@ -156,26 +172,31 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 
 								debug ("\n\n Dead node = "+ deadNode + " Its Non dead nbrs: " + "Right = " + new_right + "Left = " + new_left );
 
-								String args2[] = {sendUpdateNbr, selfId, "right", new_right };	//ordered_list.get(k)};
+								String args2[] = {sendUpdateNbr, selfId, "right", new_right };	
 								msg = RingSubstrate.joinit (args2);
-								reply = RingSubstrate.sendToHost (msg, new_left );	//ordered_list.get(j));
+								reply = RingSubstrate.sendToHost (msg, new_left );
 								
 								// // PKT = TAG # SRC # left/right # new_id 
-
-								String args3[] = {sendUpdateNbr, selfId, "left", new_left };	//ordered_list.get(j)};
+								String args3[] = {sendUpdateNbr, selfId, "left", new_left };
 								msg = RingSubstrate.joinit (args3);
-								reply = RingSubstrate.sendToHost (msg, new_right );		//ordered_list.get(k));
+								reply = RingSubstrate.sendToHost (msg, new_right );
 							}	// else
 
 
 						}	// for
 
 						// repritn for verification of 
-						ordered_list = myRingSubs.getHosts();
-						broadcast = listToString (ordered_list);
-						debug ("\n #### After removing the dead nodes, NEW LIST = " + broadcast);
 
 					} // if non zero size of dead list
+					ordered_list = myRingSubs.getHosts();
+					String broadcast = listToString (ordered_list);
+					String []args1 = {sendBroadcast_tag , selfId, broadcast};
+					msg = RingSubstrate.joinit (args1);
+					for (int i=0; i < ordered_list.size(); i++) {
+						String desti = ordered_list.get(i);
+						reply = RingSubstrate.sendToHost_tmp(msg, desti);			// check here if node died	beta1
+					}
+					debug ("\n #### After removing the dead nodes, NEW LIST = " + broadcast);
 
 				} catch (Exception e) 
 					{ e.printStackTrace(); }
@@ -236,6 +257,8 @@ class RingSubstrate extends Thread {
 	// PKT = TAG # SRC # broadcast 											
 	String sendUpdateNbr 	= "sendUpdateNbr";
 	// PKT = TAG # SRC # left/right # new_id 											
+	String		heartBeat_tag = "heartBeat";
+	// PKT = TAG # SRC
 
 	String request = "request";
 	String response = "response";
@@ -340,9 +363,10 @@ The ELECTION messages sent by candidates contain three fields:
 		}
 		catch(Exception e)
 		{
-			//if (e.toString().equals ("java.net.ConnectException: Connection refused"))
+			if (e.toString().equals ("java.net.ConnectException: Connection refused"))
+			return "no";
 			//return "java.net.ConnectException: Connection refused";
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 		System.out.println (whoami + ": returns null ");
 		return null;
@@ -407,11 +431,21 @@ The ELECTION messages sent by candidates contain three fields:
 				
 
 //###################################### handler for election msg listen A ###############################################
+				if(msg_tag.equals(heartBeat_tag)) {		
+					outToClient.writeBytes("yes\n");
+//					broadcastList = words[2];
+//					selected_leader = src;
+//					debug (" Broadcast msg from: " + selected_leader + "\n list = " + broadcastList);
+
+					// TODO : send a ping packetto leader
+				}
+//###################################### handler for election msg listen A ###############################################
 
 				if(msg_tag.equals(sendUpdateNbr)) {
-					outToClient.writeBytes("yes\n");		// why are we still doing this ?
+					//outToClient.writeBytes("yes\n");		// why are we still doing this ?
 					String lr = words [2];		// left or right ?
 					String newnbr = words[3];
+					debug("Got ngbr update msg, nbr = " + newnbr);
 
 					if (lr.equals ("right")) {
 						nbrRight = newnbr;
@@ -425,8 +459,9 @@ The ELECTION messages sent by candidates contain three fields:
 					// TODO :print an ordered list again to see if ring is joined 
 				}
 
+//###################################### handler for election msg listen A ###############################################
 				if(msg_tag.equals(sendBroadcast_tag)) {		
-					outToClient.writeBytes("yes\n");
+					//outToClient.writeBytes("yes\n");
 					broadcastList = words[2];
 					selected_leader = src;
 					debug (" Broadcast msg from: " + selected_leader + "\n list = " + broadcastList);
@@ -443,7 +478,7 @@ The ELECTION messages sent by candidates contain three fields:
 					//debug (selfId + " : msg received sendStopLeaderThread_tag");
 
 					if (selfId.equals(midpoint)) {
-						debug (" Stop self leader election thread ");
+						//debug (" Stop self leader election thread ");
 						synchronized (FindLeader.lock1) {
 							FindLeader.election_continues = false;	
 							FindLeader.am_i_leader = false;
@@ -478,12 +513,12 @@ The ELECTION messages sent by candidates contain three fields:
 								//msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + (++phase) + msgDelimiter + Math.pow(2, phase) + msgDelimiter + compareWith;	// CHECK phase, hop
 								// copy from while leader thread.
 							reply1 = sendToHost_tmp (msg, nbrRight);
-							debug("Between right and left in phase = " + phase);
+							//debug("Between right and left in phase = " + phase);
 							try {
-								sleep(5000);
+								//sleep(5000);
 								} catch (Exception e) { e.printStackTrace(); }
 							reply2 = sendToHost_tmp (msg, nbrLeft);
-							debug("After right and left in phase = " + phase);
+							//debug("After right and left in phase = " + phase);
 						}
 						// else nthing todo
 					}
@@ -509,7 +544,7 @@ The ELECTION messages sent by candidates contain three fields:
 
 					if (selfId.compareTo(compareWith) > 0)	{	// swallow	or tell back the mid point to stop that while kloop
 							// u shud tell the leader theread on the mid point to stop 'its leader election'
-						debug (" Msg. swallow packet from " + compareWith );
+						//debug (" Msg. swallow packet from " + compareWith );
 						String [] args = {sendStopLeaderThread_tag , selfId , compareWith };	//alpha3
 						msg = joinit (args);
 							//msg = sendStopLeaderThread_tag + msgDelimiter + selfId + msgDelimiter + compareWith;
@@ -529,7 +564,7 @@ The ELECTION messages sent by candidates contain three fields:
 								//msg = sendElection_tag + msgDelimiter + selfId + msgDelimiter + phase + msgDelimiter + (hop-1) + msgDelimiter + compareWith;
 							msg = joinit (args);
 							//relay
-							debug("before relaying the msg = " + msg);
+							//debug("before relaying the msg = " + msg);
 							relay (msg, src);
 							//debug(msg + " relayed from " + src);
 							}
@@ -581,7 +616,7 @@ The ELECTION messages sent by candidates contain three fields:
 					String joinRingSetH0_res = hostLeft + msgDelimiter + hostRight + '\n'; // how will H0 know, that this is the response type ? i mean its serersocket shud know what msg. id to decipher
 
 					outToClient.writeBytes(joinRingSetH0_res);
-					debug("Left = " + nbrLeft + " Right = " + nbrRight);
+					//debug("Left = " + nbrLeft + " Right = " + nbrRight);
 					//String reply = sendToHost(joinRingSetH0_res, src);
 
 				}
@@ -592,7 +627,7 @@ The ELECTION messages sent by candidates contain three fields:
 					nbrLeft = src;
 					msg = "yes" + '\n';
 					outToClient.writeBytes(msg);
-					debug("Left = " + nbrLeft + " Right = " + nbrRight);
+					//debug("Left = " + nbrLeft + " Right = " + nbrRight);
 				}
 
 //###################################### case 3 ######################################################################
@@ -608,14 +643,14 @@ The ELECTION messages sent by candidates contain three fields:
 					//debug(" ----- " + words[2]);
 					pros_nbr = words[2];						// can throw outofbounds
 					//debug(" ----- pros_nbr = " + pros_nbr);
-					debug("Left = " + nbrLeft + " Right = " + nbrRight);
+					//debug("Left = " + nbrLeft + " Right = " + nbrRight);
 					// the host X has send its nbrs msg like = leaveRing_tag # X's id # <prospective-joinee>
 					// but this node shud know before hand if X was a right nbr or left nbr ?
 					// hence, the msg from X shud also have X's id
 					if (nbrLeft.compareTo(src) == 0) {
-						debug("here before nbrLeft = " + nbrLeft);
+						//debug("here before nbrLeft = " + nbrLeft);
 						nbrLeft = pros_nbr;
-						debug("here after nbrLeft = " + nbrLeft);
+						//debug("here after nbrLeft = " + nbrLeft);
 					}
 					else if (nbrRight.compareTo(src) == 0) {
 						nbrRight = pros_nbr;
@@ -623,7 +658,7 @@ The ELECTION messages sent by candidates contain three fields:
 					//debug("---- yes");
 					msg = "yes" + '\n';
 					outToClient.writeBytes(msg);
-					debug("Left = " + nbrLeft + " Right = " + nbrRight);
+					//debug("Left = " + nbrLeft + " Right = " + nbrRight);
 					// reply to leaving host f'off
 				}
 
@@ -636,17 +671,17 @@ The ELECTION messages sent by candidates contain three fields:
 					outToClient.writeBytes("yes\n");
 					if (src.indexOf(selfId) != -1) // u are done
 					{
-						debug("Got the host list");
+						//debug("Got the host list");
 						// all the hostids will be joined by "||"
 						synchronized (lock) {
 								hostsJoinedlist = src;
 								hostlistBool = false;
 								lock.notifyAll();
 
-								debug("Value of this in notify is  " + this);
+								//debug("Value of this in notify is  " + this);
 								//this.doNotify();
 								//doNotify();
-								debug("==========After notifying the main thread");
+								//debug("==========After notifying the main thread");
 						}
 					}
 					else {	// make a packet and pass on to ur rite nbr 
@@ -672,7 +707,7 @@ The ELECTION messages sent by candidates contain three fields:
 						//String msg = sendAppMsg_tag + msgDelimiter + src;
 						//sendToHost (msg, nbrRight);
 						sendToHost(clientMsg, nbrLeft);
-						debug("Forwarding msg \"sendMsgCW_tag\" from " + src);
+						//debug("Forwarding msg \"sendMsgCW_tag\" from " + src);
 						myrapp.deliver(message);
 					}
 				}
@@ -691,7 +726,7 @@ The ELECTION messages sent by candidates contain three fields:
 						//String msg = sendAppMsg_tag + msgDelimiter + src;
 						//sendToHost (msg, nbrRight);
 						sendToHost(clientMsg, nbrRight);
-						debug("Forwarding msg from " + src);
+						//debug("Forwarding msg from " + src);
 						myrapp.deliver(message);
 					}
 				}
@@ -711,7 +746,7 @@ The ELECTION messages sent by candidates contain three fields:
 						//String msg = sendAppMsg_tag + msgDelimiter + src;
 						//sendToHost (msg, nbrRight);
 						sendToHost(clientMsg, nbrRight);
-						debug("Forwarding msg from " + src);
+						//debug("Forwarding msg from " + src);
 					}
 				}
 
@@ -745,7 +780,7 @@ The ELECTION messages sent by candidates contain three fields:
 		 */
 		/* Say the 2 hostnames are joined by a # */
 		int posi = reply.indexOf("#");
-		debug("POSI = " + posi);
+		//debug("POSI = " + posi);
 		if (posi == -1)
 		{
 			return null;

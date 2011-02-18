@@ -32,7 +32,9 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 	String	nbrLeft;
 	public static String		sendElection_tag;
 	public static String		sendBroadcast_tag;
+	public static String		sendUpdateNbr;
 	public static Object		lock1;
+	public List<String>		dead_list;
 
 	public FindLeader (RingApp ra, RingSubstrate rs) {
 		//System.out.println ("I am FindLeader::ctor");
@@ -46,10 +48,13 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 		leader_id = "batman";
 		sendElection_tag = "sendElection";
 		sendBroadcast_tag = "sendBroadcast";
+		sendUpdateNbr 	= "sendUpdateNbr";
+		// PKT = TAG # SRC # left/right # new_id 											
 		nbrRight = rs.nbrRight;
 		nbrLeft = rs.nbrLeft;
 		selfId = rs.selfId;
 		lock1 = new Object();
+		dead_list = new ArrayList <String> ();
 		//System.out.println ("FindLeader::ctor" + selfId + "||"+nbrLeft+"||"+nbrRight);
 	}
 	
@@ -95,7 +100,7 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 		
 		if (am_i_leader == true) {
 
-			while (true) { 	
+			while (true) {
 				try {
 					sleep (30000);		// 30 secs.
 				} catch (Exception e) {
@@ -113,12 +118,67 @@ class FindLeader extends Thread {			// extend it as RingSubs., so that datamembe
 
 					for (int i=0; i < ordered_list.size(); i++) {
 						String desti = ordered_list.get(i);
+						//check if host is dead ?
+						InetAddress address = InetAddress.getByName(desti);
+						if (address.isReachable(3000) == false) {
+							debug ("\n Node :"+ desti + " has died ");
+							dead_list.add(desti);
+						}
+
 						String []args1 = {sendBroadcast_tag , selfId, broadcast};
 						msg = RingSubstrate.joinit (args1);
 						reply = RingSubstrate.sendToHost(msg, desti);			// check here if node died	beta1
 					}
 
-				} catch (Exception e) { e.printStackTrace(); }
+					if (dead_list.size() != 0) {
+					// tell fkers to re-join ; use ordered_list ; find the next living node on either of dead nodes
+						for (int i=0;i < dead_list.size(); i++) {
+							String deadNode = dead_list.get(i);
+							int posi = ordered_list.indexOf (deadNode);
+							int N = ordered_list.size();
+
+							if (posi == -1) {
+								// this cant be possible ?
+							}
+							else {
+								int j=(posi+1)%N, k;
+								k = (posi==0) ? N-1 : posi-1;
+
+								// check for non dead node in ordered_list next to this one.
+								while (dead_list.indexOf(ordered_list.get(j)) != -1) { j=(j+1)%N; }
+								while (dead_list.indexOf(ordered_list.get(k)) != -1) { 
+									if (k==0) { k = N-1; } 
+									else { k = k-1; } 
+									}
+
+								String new_left = ordered_list.get(j);
+								String new_right = ordered_list.get(k);
+
+								debug ("\n\n Dead node = "+ deadNode + " Its Non dead nbrs: " + "Right = " + new_right + "Left = " + new_left );
+
+								String args2[] = {sendUpdateNbr, selfId, "right", new_right };	//ordered_list.get(k)};
+								msg = RingSubstrate.joinit (args2);
+								reply = RingSubstrate.sendToHost (msg, new_left );	//ordered_list.get(j));
+								
+								// // PKT = TAG # SRC # left/right # new_id 
+
+								String args3[] = {sendUpdateNbr, selfId, "left", new_left };	//ordered_list.get(j)};
+								msg = RingSubstrate.joinit (args3);
+								reply = RingSubstrate.sendToHost (msg, new_right );		//ordered_list.get(k));
+							}	// else
+
+
+						}	// for
+
+						// repritn for verification of 
+						ordered_list = myRingSubs.getHosts();
+						broadcast = listToString (ordered_list);
+						debug ("\n #### After removing the dead nodes, NEW LIST = " + broadcast);
+
+					} // if non zero size of dead list
+
+				} catch (Exception e) 
+					{ e.printStackTrace(); }
 			}	// while-infinite
 		}
 
@@ -174,6 +234,8 @@ class RingSubstrate extends Thread {
 	// PKT = TAG # SRC # comparator 											
 	String sendBroadcast_tag 	= "sendBroadcast";
 	// PKT = TAG # SRC # broadcast 											
+	String sendUpdateNbr 	= "sendUpdateNbr";
+	// PKT = TAG # SRC # left/right # new_id 											
 
 	String request = "request";
 	String response = "response";
@@ -278,6 +340,8 @@ The ELECTION messages sent by candidates contain three fields:
 		}
 		catch(Exception e)
 		{
+			//if (e.toString().equals ("java.net.ConnectException: Connection refused"))
+			//return "java.net.ConnectException: Connection refused";
 			e.printStackTrace();
 		}
 		System.out.println (whoami + ": returns null ");
@@ -343,6 +407,23 @@ The ELECTION messages sent by candidates contain three fields:
 				
 
 //###################################### handler for election msg listen A ###############################################
+
+				if(msg_tag.equals(sendUpdateNbr)) {		
+					outToClient.writeBytes("yes\n");		// why are we still doing this ?
+				String lr = words [2];		// left or right ?
+				String newnbr = words[3];
+
+				if (lr.equals ("right")) {
+					nbrRight = newnbr;
+					debug ("\nUpdate my right nbr");
+					}
+				else {
+					nbrLeft = newnbr;
+					debug ("\nUpdate my left nbr");
+					}
+
+					// TODO :print an ordered list again to see if ring is joined 
+				}
 
 				if(msg_tag.equals(sendBroadcast_tag)) {		
 					outToClient.writeBytes("yes\n");
